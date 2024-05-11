@@ -1,0 +1,8 @@
+".\Objects\main.obj",
+".\Objects\delay.obj",
+".\Objects\ds1307.obj",
+".\Objects\i2c.obj",
+".\Objects\lcd20x4.obj",
+".\Objects\dht22.obj" 
+TO ".\Objects\DS1307" 
+PRINT(".\Listings\DS1307.m51") RAMSIZE(256) 

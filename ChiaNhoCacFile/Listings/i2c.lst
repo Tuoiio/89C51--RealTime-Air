@@ -1,0 +1,110 @@
+C51 COMPILER V9.60.0.0   I2C                                                               09/17/2023 15:13:53 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE I2C
+OBJECT MODULE PLACED IN .\Objects\i2c.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE i2c.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\i2c.l
+                    -st) OBJECT(.\Objects\i2c.obj)
+
+line level    source
+
+   1          #include <i2c.h>
+   2          #include < regx51.h>
+   3          
+   4          sbit SCL = P3^6;
+   5          sbit SDA = P3^5;
+   6          
+   7          void Delay_I2C(unsigned int Time){
+   8   1              while(Time--);
+   9   1      }
+  10          /********************Bat dau gui tin hieu*****************/
+  11          void I2C_Start(void){
+  12   1              SDA = 1;
+  13   1              SCL = 1;
+  14   1              SDA = 0;
+  15   1              Delay_I2C(2);
+  16   1              SCL = 0;
+  17   1      }
+  18          /*******************Dung gui tin hieu********************/
+  19          void I2C_Stop(void){
+  20   1              SDA = 0;
+  21   1              SCL = 0;
+  22   1              SCL = 1;
+  23   1              Delay_I2C(2);
+  24   1              SDA = 1;
+  25   1      }
+  26          
+  27          /*********************Nhan ACK tu slave******************/
+  28          bit I2C_Get_ACK(void){
+  29   1              bit Result;
+  30   1              SDA = 1;
+  31   1              Delay_I2C(2);
+  32   1              SCL = 1;
+  33   1              Delay_I2C(2);
+  34   1              Result = SDA;
+  35   1              SCL = 0;
+  36   1              return Result;
+  37   1      }
+  38          
+  39          bit I2C_Write(unsigned char Data){
+  40   1              unsigned char i;
+  41   1              for(i = 0; i < 8; i++){
+  42   2                      SDA = (Data << i) & 0x80;
+  43   2                      SCL = 1;
+  44   2                      Delay_I2C(2); 
+  45   2                      SCL = 0;
+  46   2              }
+  47   1              // ACK
+  48   1              return(I2C_Get_ACK());
+  49   1      }
+  50          
+  51          
+  52          /********************Gui ACK tu Master******************/
+  53          void I2C_ACK(void){
+  54   1              SDA = 0;
+C51 COMPILER V9.60.0.0   I2C                                                               09/17/2023 15:13:53 PAGE 2   
+
+  55   1              Delay_I2C(2);
+  56   1              SCL = 1;
+  57   1              Delay_I2C(2);
+  58   1              SCL = 0;
+  59   1      }
+  60          /*******************Gui NACK tu Master********************/
+  61          void I2C_NACK(void){
+  62   1              SDA = 1;
+  63   1              Delay_I2C(2);
+  64   1              SCL = 1;
+  65   1              Delay_I2C(2);
+  66   1              SCL = 0;
+  67   1      }
+  68          
+  69          /********************* Doc du lieu tu Slave*****************/
+  70          unsigned char I2C_Read(bit ACK){
+  71   1              unsigned char i, Data = 0x00;
+  72   1              for(i = 0; i < 8; i++){
+  73   2                      SDA = 1;
+  74   2                      Delay_I2C(2);
+  75   2                      SCL = 1;
+  76   2                      Delay_I2C(2);
+  77   2                      Data = (Data << 1) | SDA;
+  78   2                      SCL = 0;
+  79   2              }
+  80   1              // ACK
+  81   1              if(ACK){ I2C_ACK();}
+  82   1              else    {I2C_NACK();}
+  83   1              return Data;
+  84   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    157    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----       2
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

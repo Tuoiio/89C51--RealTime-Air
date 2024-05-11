@@ -1,0 +1,200 @@
+C51 COMPILER V9.60.0.0   LCD20X4                                                           09/17/2023 16:34:08 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE LCD20X4
+OBJECT MODULE PLACED IN .\Objects\lcd20x4.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE lcd20x4.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\l
+                    -cd20x4.lst) OBJECT(.\Objects\lcd20x4.obj)
+
+line level    source
+
+   1          
+   2          /**
+   3            ******************************************************************************
+   4            * @file               LCD20X4.c
+   5            * @author     Duong Xuan Tuoi
+   6            * @date               25/06/2019
+   7            ******************************************************************************
+   8            */
+   9          #include "LCD20X4.h"
+  10          /*******************************************************************************
+  11          Noi Dung      :   Gui tin hieu Enable den LCD20X4.
+  12          Tham Bien     :   Khong.
+  13          Tra Ve        :   Khong.
+  14          *******************************************************************************/
+  15           void LCD20X4_Enable(void)
+  16          {
+  17   1          LCD_EN = 1;//cho chan EN len muc cao
+  18   1          delay_us(3);
+  19   1                      LCD_EN = 0;//cho chân EN xuong muc thap
+  20   1          delay_us(50);
+  21   1      }
+  22          
+  23          /*******************************************************************************
+  24          Noi Dung      :   Ham goi 1 byte ra LCD20X4.
+  25          Tham Bien     :   data: du liwu can goi, reg: chon thanh ghi du lieu hay thanh ghi lenh
+  26          Tra Ve        :   Khong.
+  27          *******************************************************************************/
+  28           void LCD20X4_Send4Bit (unsigned char Data )
+  29          {
+  30   1                      LCD_D4 =  Data &    0x01; //=>0x01=0b00000001=> goi bit dau tien
+  31   1                      LCD_D5 = (Data >> 1) & 1;//=>dich sang phai 1 bit roi xuat ra bit thu 2
+  32   1                      LCD_D6 = (Data >> 2) & 1;//=>dich sang phai 1 bit roi xuat ra bit thu 3
+  33   1                      LCD_D7 = (Data >> 3) & 1;//=>dich sang phai 1 bit roi xuat ra bit thu 4
+  34   1      }
+  35           /*******************************************************************************
+  36          Noi Dung    :   Gui 1 byte du lieu den LCD.
+  37          Tham Bien   :   command: byte du lieu can goi; reg chon thanh ghi lenh hay du lieu
+  38          Tra Ve      :   Khong.
+  39          ********************************************************************************/
+  40          
+  41          void LCD20X4_SendCommand (unsigned char  Command,unsigned char reg ){
+  42   1               if(reg == 0)   LCD_RS = 0;     // chon thanh ghi lenh
+  43   1         else                                 LCD_RS = 1;             // chon thanh ghi du lieu
+  44   1        
+  45   1                      LCD20X4_Send4Bit(Command >> 4);   /* Gui 4 bit cao */
+  46   1                      LCD20X4_Enable();
+  47   1                      LCD20X4_Send4Bit(Command);      /* Gui 4 bit thap*/
+  48   1                      LCD20X4_Enable();
+  49   1      }
+  50          
+  51          
+  52          /*******************************************************************************
+  53          Noi Dung     :   Xoa noi dung hien thi tren LCD20X4.
+  54          Tham Bien    :   Khong.
+C51 COMPILER V9.60.0.0   LCD20X4                                                           09/17/2023 16:34:08 PAGE 2   
+
+  55          Tra Ve       :   Khong.
+  56          ********************************************************************************/
+  57          void LCD20X4_Clear(){
+  58   1          LCD20X4_SendCommand(0x01,0);// goi lenh dieu khien LCD
+  59   1          delay_ms(5);
+  60   1      }
+  61          /*******************************************************************************
+  62          Noi Dung     :   Khoi tao LCD20X4.
+  63          Tham Bien    :   Khong.
+  64          Tra Ve       :   Khong.
+  65          *******************************************************************************/
+  66           void LCD20X4_Init ( void )
+  67          {
+  68   1          LCD_RS = 0;
+  69   1                LCD_RW = 0;
+  70   1          LCD_EN = 0;
+  71   1          LCD20X4_Send4Bit(0x03);// goi du lieu cho LCD20X4 kieu mat dinh, dua con tro ve dau dong dau tin
+  72   1          LCD20X4_Enable();
+  73   1          delay_us(5);
+  74   1          LCD20X4_Send4Bit(0x02);// goi du lieu cho LCD20X4 kieu mat dinh, dua con tro ve dau dong dau tin
+  75   1          LCD20X4_Enable();
+  76   1          delay_us(5);
+  77   1          LCD20X4_SendCommand(0x28,0);// ghi lenh: giao thuc 4 bit, hien thi 2 hang, ki tu 5x7
+  78   1          LCD20X4_SendCommand(0x0C,0);// ghi lenh: cho phep hien thi man hinh
+  79   1          LCD20X4_Clear();           // xoa toan bo khung hinh
+  80   1      }
+  81          /*******************************************************************************
+  82          Noi Dung     :   Thiet lap vi tri con tro LCD20X4.
+  83          Tham Bien    :   x: vi tri cot cua con tro. x = 0 -> 15.
+  84                           y: vi tri hang cua con tro. y= 0,1.
+  85          Tra Ve       :   Khong.
+  86          ********************************************************************************/
+  87          void LCD20X4_Gotoxy(unsigned char x, unsigned char y){
+  88   1        unsigned char  Address;
+  89   1              switch (y){
+  90   2                      case 0:{ Address = 0x00; break; } //Starting address of 0st line
+  91   2                      case 1:{ Address = 0x40; break; }//Starting address of 1st line
+  92   2                      case 2:{ Address = 0x14; break; }//Starting address of 2st line
+  93   2                      case 3:{ Address = 0x54; break; }//Starting address of 3st line
+  94   2              }
+  95   1              Address = Address + x;
+  96   1        LCD20X4_SendCommand(0x80 | Address, 0);//ghi lenh dieu khien LCD
+  97   1      }
+  98          
+  99          
+ 100          /*******************************************************************************
+ 101          Noi Dung    :   Viet 1 ki tu len LCD20X4.
+ 102          Tham Bien   :   Data  :   Gia tri ki tu can hien thi.
+ 103          Tra Ve      :   Khong.
+ 104          ********************************************************************************/
+ 105           void LCD20X4_PutChar (unsigned char Data ){
+ 106   1          LCD20X4_SendCommand(Data,1);// ghi du lieu
+ 107   1      }
+ 108          /*******************************************************************************
+ 109          Noi Dung    :   Viet 1 chuoi ki tu len LCD20X4.
+ 110          Tham Bien   :   *s   :  chuoi du lieu can hien thi.
+ 111          Tra Ve      :   Khong.
+ 112          ********************************************************************************/
+ 113          void LCD20X4_PutString (unsigned char *s){
+ 114   1          while (*s){
+ 115   2            LCD20X4_PutChar(*s);
+ 116   2            s++;
+C51 COMPILER V9.60.0.0   LCD20X4                                                           09/17/2023 16:34:08 PAGE 3   
+
+ 117   2          }
+ 118   1      }
+ 119          
+ 120          /*******************************************************************************
+ 121          Noi Dung    :   Hin thi so len LCD20X4.
+ 122          Tham Bien   :   number  : so can hiren thi, leng la chieu dai cau chuoi so
+ 123          Tra Ve      :   Khong.
+ 124          ********************************************************************************/
+ 125          
+ 126          void LCD20X4_SendInteger(int iNumber){
+ 127   1              char i, CacKyTu[10];
+ 128   1              if(iNumber != 0){
+ 129   2                      if(iNumber < 0) LCD20X4_SendCommand(0x2D, 1);  // dau tru
+ 130   2                      for(i = 0; iNumber != 0; i++){
+ 131   3                              if(iNumber > 0)
+ 132   3                                      CacKyTu[i] = iNumber  % 10;
+ 133   3                              else
+ 134   3                                      CacKyTu[i] = (iNumber * -1) % 10;
+ 135   3                              iNumber = iNumber / 10;
+ 136   3                      }
+ 137   2                      while(i > 0){
+ 138   3                              LCD20X4_SendCommand(CacKyTu[i - 1] | 0x30, 1);
+ 139   3                              i--;
+ 140   3                      }
+ 141   2              }
+ 142   1              else{
+ 143   2                      LCD20X4_SendCommand(0 + 0x30, 1);
+ 144   2              }
+ 145   1      }
+ 146          
+ 147          void LCD20X4_SendFloat(float fNumber){
+ 148   1              int a, b;
+ 149   1              a = (int)fNumber;
+ 150   1              if (fNumber >= 0.0) b = (fNumber - a) * 10;
+ 151   1              else{
+ 152   2                      b = (fNumber - a) * (-10);
+ 153   2                      if(fNumber <= 0.0 && fNumber > -1.0)
+ 154   2                              LCD20X4_SendCommand(0x2D,1);
+ 155   2              }
+ 156   1              LCD20X4_SendInteger(a);
+ 157   1              if(b >= 0){
+ 158   2                      LCD20X4_SendCommand(0x2E,1);
+ 159   2                      LCD20X4_SendInteger(b);
+ 160   2              }
+ 161   1      }
+ 162          
+ 163          void LCD20X4_CreateChar(unsigned char location, unsigned char charmap[]){
+ 164   1              char x;
+ 165   1              location &= 0x07;
+ 166   1              LCD20X4_SendCommand(0x40 | (location << 3), 0);
+ 167   1              for(x = 0; x < 8; x++){
+ 168   2                      LCD20X4_SendCommand(charmap[x], 1);
+ 169   2              }
+ 170   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    638    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----      30
+C51 COMPILER V9.60.0.0   LCD20X4                                                           09/17/2023 16:34:08 PAGE 4   
+
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

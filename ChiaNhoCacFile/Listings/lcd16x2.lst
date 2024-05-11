@@ -1,0 +1,190 @@
+C51 COMPILER V9.60.0.0   LCD16X2                                                           02/04/2023 22:43:35 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE LCD16X2
+OBJECT MODULE PLACED IN .\Objects\lcd16x2.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE lcd16x2.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\l
+                    -cd16x2.lst) OBJECT(.\Objects\lcd16x2.obj)
+
+line level    source
+
+   1          
+   2          /**
+   3            ******************************************************************************
+   4            * @file               lcd16x2.c
+   5            * @author     Duong Xuan Tuoi
+   6            * @date               23/10/2022
+   7            ******************************************************************************
+   8            */
+   9          #include "lcd16x2.h"
+  10          #include < delay.h>
+  11          /*******************************************************************************
+  12          Noi Dung      :   Gui tin hieu Enable den LCD16X2.
+  13          Tham Bien     :   Khong.
+  14          Tra Ve        :   Khong.
+  15          *******************************************************************************/
+  16          
+  17          
+  18          
+  19           void LCD16X2_Enable(void)
+  20          {
+  21   1          LCD_EN=1;//cho chan EN len muc cao
+  22   1          delay_us(3);
+  23   1              LCD_EN=0;//cho chân EN xuong muc thap
+  24   1          delay_us(50);
+  25   1      }
+  26          
+  27          /*******************************************************************************
+  28          Noi Dung      :   Ham goi 1 byte ra LCD16X2.
+  29          Tham Bien     :   data: du liwu can goi, reg: chon thanh ghi du lieu hay thanh ghi lenh
+  30          Tra Ve        :   Khong.
+  31          *******************************************************************************/
+  32           void LCD16X2_Send4Bit (unsigned char Data )
+  33          {
+  34   1                      LCD_D4 =  Data   &   0x01; //=>0x01=0b00000001=> goi bit dau tien
+  35   1                      LCD_D5 = (Data >> 1)& 1; //=>dich sang phai 1 bit roi xuat ra bit thu 2
+  36   1                      LCD_D6 = (Data >> 2)& 1; //=>dich sang phai 1 bit roi xuat ra bit thu 3
+  37   1                      LCD_D7 = (Data >> 3)& 1; //=>dich sang phai 1 bit roi xuat ra bit thu 4
+  38   1      }
+  39           /*******************************************************************************
+  40          Noi Dung    :   Gui 1 byte du lieu den LCD.
+  41          Tham Bien   :   command: byte du lieu can goi; reg chon thanh ghi lenh hay du lieu
+  42          Tra Ve      :   Khong.
+  43          ********************************************************************************/
+  44          
+  45          void LCD16X2_SendCommand (unsigned char  Command,unsigned char reg ){
+  46   1               if(reg == 0) LCD_RS = 0;               // chon thanh ghi lenh
+  47   1           else                         LCD_RS = 1;           // chon thanh ghi du lieu
+  48   1         
+  49   1              LCD16X2_Send4Bit (Command >> 4);   /* Gui 4 bit cao */
+  50   1              LCD16X2_Enable() ;
+  51   1              LCD16X2_Send4Bit(Command & 0x0F);      /* Gui 4 bit thap*/
+  52   1              LCD16X2_Enable () ;
+  53   1      }
+  54          /*******************************************************************************
+C51 COMPILER V9.60.0.0   LCD16X2                                                           02/04/2023 22:43:35 PAGE 2   
+
+  55          Noi Dung     :   Xoa noi dung hien thi tren LCD16X2.
+  56          Tham Bien    :   Khong.
+  57          Tra Ve       :   Khong.
+  58          ********************************************************************************/
+  59          void LCD16X2_Clear(){
+  60   1          LCD16X2_SendCommand(0x01,0);// goi lenh dieu khien LCD
+  61   1          delay_ms(5);
+  62   1      }
+  63          
+  64          /*******************************************************************************
+  65          Noi Dung     :   Khoi tao LCD16X2.
+  66          Tham Bien    :   Khong.
+  67          Tra Ve       :   Khong.
+  68          *******************************************************************************/
+  69           void LCD16X2_Init (void){
+  70   1          LCD_RS = 0;
+  71   1              LCD_RW = 0;
+  72   1          LCD_EN = 0;
+  73   1          LCD16X2_Send4Bit(0x03);// goi du lieu cho LCD16x2 kieu mat dinh, dua con tro ve dau dong dau tin
+  74   1          LCD16X2_Enable();
+  75   1          delay_us(5);
+  76   1          LCD16X2_Send4Bit(0x02);// goi du lieu cho LCD16x2 kieu mat dinh, dua con tro ve dau dong dau tin
+  77   1          LCD16X2_Enable();
+  78   1          delay_us(5);
+  79   1          LCD16X2_SendCommand(0x28,0);// ghi lenh: giao thuc 4 bit, hien thi 2 hang, ki tu 5x7
+  80   1          LCD16X2_SendCommand(0x0C,0);// ghi lenh: cho phep hien thi man hinh
+  81   1          LCD16X2_Clear();           // xoa toan bo khung hinh
+  82   1      }
+  83          /*******************************************************************************
+  84          Noi Dung     :   Thiet lap vi tri con tro LCD16X2.
+  85          Tham Bien    :   x: vi tri hang cua con tro. x = 0,1.
+  86                           y: vi tri hang cua con tro. y= 0 -> 15.
+  87          Tra Ve       :   Khong.
+  88          ********************************************************************************/
+  89          void LCD16X2_Gotoxy(unsigned char x, unsigned char y){
+  90   1              unsigned char  Address;            // y: hang ngang        x: hang cot
+  91   1        if(!y)        Address = (0x80 + x);
+  92   1        else          Address = (0xC0 + x);
+  93   1      
+  94   1        delay_ms(1);
+  95   1        LCD16X2_SendCommand(Address,0);//ghi lenh dieu khien LCD
+  96   1        delay_ms(5);
+  97   1      }
+  98          
+  99          /*******************************************************************************
+ 100          Noi Dung    :   Viet 1 ki tu len LCD16X2.
+ 101          Tham Bien   :   Data  :   Gia tri ki tu can hien thi.
+ 102          Tra Ve      :   Khong.
+ 103          ********************************************************************************/
+ 104           void LCD16X2_PutChar (unsigned char Data ){
+ 105   1          LCD16X2_SendCommand(Data,1);// ghi du lieu
+ 106   1      
+ 107   1      }
+ 108          /*******************************************************************************
+ 109          Noi Dung    :   Viet 1 chuoi ki tu len LCD16X2.
+ 110          Tham Bien   :   *s   :  chuoi du lieu can hien thi.
+ 111          Tra Ve      :   Khong.
+ 112          ********************************************************************************/
+ 113          void LCD16X2_PutString (unsigned char *s){
+ 114   1          while (*s ){
+ 115   2              LCD16X2_PutChar(*s);
+ 116   2              s++;
+C51 COMPILER V9.60.0.0   LCD16X2                                                           02/04/2023 22:43:35 PAGE 3   
+
+ 117   2          }
+ 118   1      }
+ 119          
+ 120          /*******************************************************************************
+ 121          Noi Dung    :   Hien thi so len LCD16X2.
+ 122          Tham Bien   :   number  : so can hiren thi
+ 123          Tra Ve      :   Khong.
+ 124          ********************************************************************************/
+ 125          void LCD16X2_SendInteger(int iNumber){
+ 126   1              char i, CacKyTu[10];
+ 127   1              if(iNumber != 0){
+ 128   2                      if(iNumber < 0) LCD16X2_SendCommand(0x2D, 1);  // dau tru
+ 129   2                      for(i = 0; iNumber != 0; i++){
+ 130   3                              if(iNumber > 0)
+ 131   3                                      CacKyTu[i] = iNumber  % 10;
+ 132   3                              else
+ 133   3                                      CacKyTu[i] = (iNumber * -1) % 10;
+ 134   3                              iNumber = iNumber / 10;
+ 135   3                      }
+ 136   2                      while(i > 0){
+ 137   3                              LCD16X2_SendCommand(CacKyTu[i - 1] | 0x30, 1);
+ 138   3                              i--;
+ 139   3                      }
+ 140   2              }
+ 141   1              else{
+ 142   2                      LCD16X2_SendCommand(0 + 0x30, 1);
+ 143   2              }
+ 144   1      }
+ 145          
+ 146          void LCD16X2_SendFloat(float fNumber){
+ 147   1              int a, b;
+ 148   1              a = (int)fNumber;
+ 149   1              if (fNumber >= 0.0) b = (fNumber - a) * 10;
+ 150   1              else{
+ 151   2                      b = (fNumber - a) * (-10);
+ 152   2                      if(fNumber <= 0.0 && fNumber > -1.0)
+ 153   2                              LCD16X2_SendCommand(0x2D,1);
+ 154   2              }
+ 155   1              LCD16X2_SendInteger(a);
+ 156   1              if(b >= 0){
+ 157   2                      LCD16X2_SendCommand(0x2E,1);
+ 158   2                      LCD16X2_SendInteger(b);
+ 159   2              }
+ 160   1      }
+ 161          
+ 162          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    560    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----      26
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

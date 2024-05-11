@@ -1,0 +1,1 @@
+"lcd20x4.c" OPTIMIZE (8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\lcd20x4.lst) OBJECT(.\Objects\lcd20x4.obj)

@@ -1,0 +1,1013 @@
+C51 COMPILER V9.60.0.0   MAIN                                                              09/16/2023 21:07:34 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\Objects\main.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE main.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\main
+                    -.lst) OBJECT(.\Objects\main.obj)
+
+line level    source
+
+   1          #include <regx51.h>
+   2          
+   3          /**********Khai bao chan ket noi************/
+   4          sbit SDA = P1^0;
+   5          sbit SCL = P1^1;
+   6          
+   7          /********Khai bao chan giao tiep LCD************/
+   8          #define LCD_RS P0_0
+   9          #define LCD_RW P0_1
+  10          #define LCD_EN P0_2
+  11          #define LCD_D4 P0_4
+  12          #define LCD_D5 P0_5
+  13          #define LCD_D6 P0_6
+  14          #define LCD_D7 P0_7
+  15          
+  16          /*******Khai bao giao tiep nut nhan************/
+  17          sbit Button_Mode = P2^0;
+  18          sbit Button_Ok   = P2^1;
+  19          sbit Button_Up   = P2^2;
+  20          sbit Button_Down = P2^3;
+  21          sbit Buzzer      = P2^4; 
+  22          
+  23          typedef enum {false,true} bool;
+  24          
+  25          sbit DQ = P1^2;
+  26          
+  27          enum{
+  28                  READ_ROM = 0x33,
+  29                  MATCH_ROM = 0x55,
+  30                  SKIP_ROM = 0xCC,
+  31                  SEARCH_ROM = 0xF0,
+  32                  ALARM_SREACH = 0xEC,
+  33                  WRITE_SCRATCHPAD = 0x4E,
+  34                  READ_SCRATCHPAD = 0xBE,
+  35                  COPY_SCRATCHPAD = 0x48,
+  36                  CONVERT = 0x44,
+  37                  READ_POWER = 0xB4
+  38          };
+  39          
+  40          enum{
+  41                  MODE_9BIT = 0x1F,
+  42                  MODE_10BIT = 0x3F,
+  43                  MODE_11BIT = 0x5F,
+  44                  MODE_12BIT = 0x7F
+  45          };
+  46          
+  47          char *Days[] =  {"SUN","MON","TUE","WED","THU","FRI","SAT"};
+  48           char Second, Minute, Hour, Date, Day, Month, Year, Mode;
+  49          unsigned char Status_Mode_Alarm = 0,Status_Mode_Time = 0,Time_Break_Up = 0, Time_Break_Down = 0,Time_Break
+             -_Mode = 0;
+  50          bit Old_Ok, Old_Mode,Old_Up,Old_Down, am_pm, Mode12_24, read_time, Choose_Alarm_Active,Choose_Alarm   , Se
+             -t_Time, Set_ALM1, Set_ALM2, Clock_1Hz;
+  51          bit Prioritized, read_temp;
+  52          unsigned char a, b;
+C51 COMPILER V9.60.0.0   MAIN                                                              09/16/2023 21:07:34 PAGE 2   
+
+  53          int iTemp;
+  54          float fTemp;
+  55          
+  56          struct Alarm{
+  57                  char Minute ;
+  58                  char Hour ;
+  59                  char Display ;
+  60                  char Status_Mode;
+  61                  bool On_Off;
+  62                  struct Alarm_Day{
+  63                          bool Day_2,Day_3,Day_4;
+  64                          bool Day_5,Day_6,Day_7,Day_8;
+  65                  }Days;
+  66          }Alarm1, Alarm2, *Alarm_Pointer;
+  67          
+  68          /*******************************************CHUONG TRINH GIAO TIEP I2C************************************
+             -*******/
+  69          
+  70          /******************** delay cua I2C************************/
+  71          void delay_I2C(unsigned int time){
+  72   1              while(time--);
+  73   1      }
+  74          /********************Bat dau gui tin hieu*****************/
+  75          void I2C_Start(void){
+  76   1              SDA = 1;
+  77   1              SCL = 1;
+  78   1              SDA = 0;
+  79   1              delay_I2C(2);
+  80   1              SCL = 0;
+  81   1      }
+  82          /*******************Dung gui tin hieu********************/
+  83          void I2C_Stop(void){
+  84   1              SDA = 0;
+  85   1              SCL = 0;
+  86   1              SCL = 1;
+  87   1              delay_I2C(2);
+  88   1              SDA = 1;
+  89   1      }
+  90          
+  91          /*********************Nhan ACK tu slave******************/
+  92          bit I2C_Get_ACK(void){
+  93   1              bit Result;
+  94   1              SDA = 1;
+  95   1              delay_I2C(2);
+  96   1              SCL = 1;
+  97   1              delay_I2C(2);
+  98   1              Result = SDA;
+  99   1              SCL = 0;
+ 100   1              return Result;
+ 101   1      }
+ 102          
+ 103          bit I2C_Write(unsigned char Data){
+ 104   1              unsigned char i;
+ 105   1              for(i = 0; i < 8; i++){
+ 106   2                      SDA = (Data << i) & 0x80;
+ 107   2                      SCL = 1;
+ 108   2                      delay_I2C(2); 
+ 109   2                      SCL = 0;
+ 110   2              }
+ 111   1              // ACK
+ 112   1              return(I2C_Get_ACK());
+ 113   1      }
+C51 COMPILER V9.60.0.0   MAIN                                                              09/16/2023 21:07:34 PAGE 3   
+
+ 114          
+ 115          
+ 116          /********************Gui ACK tu Master******************/
+ 117          void I2C_ACK(void){
+ 118   1              SDA = 0;
+ 119   1              delay_I2C(2);
+ 120   1              SCL = 1;
+ 121   1              delay_I2C(2);
+ 122   1              SCL = 0;
+ 123   1      }
+ 124          /*******************Gui NACK tu Master********************/
+ 125          void I2C_NACK(void){
+ 126   1              SDA = 1;
+ 127   1              delay_I2C(2);
+ 128   1              SCL = 1;
+ 129   1              delay_I2C(2);
+ 130   1              SCL = 0;
+ 131   1      }
+ 132          
+ 133          /********************* Doc du lieu tu Slave*****************/
+ 134          unsigned char I2C_Read(bit ACK){
+ 135   1              unsigned char i, Data = 0x00;
+ 136   1              for(i = 0; i < 8; i++){
+ 137   2                      SDA = 1;
+ 138   2                      delay_I2C(2);
+ 139   2                      SCL = 1;
+ 140   2                      delay_I2C(2);
+ 141   2                      Data = (Data << 1) | SDA;
+ 142   2                      SCL = 0;
+ 143   2              }
+ 144   1              // ACK
+ 145   1              if(ACK){ I2C_ACK();}
+ 146   1              else    {I2C_NACK();}
+ 147   1              return Data;
+ 148   1      }
+ 149          
+ 150          /*******************************************HET CHUONG TRINH GIAO TIEP I2C********************************
+             -***********/
+ 151          
+ 152          
+ 153          
+ 154          /*******************************************CHUONG TRINH GIAO TIEP DS1307*********************************
+             -**********/
+ 155          
+ 156          /************************************/
+ 157          void delay_us(unsigned int t){
+ 158   1              while(t--);
+ 159   1      }
+ 160          void delay_ms(unsigned int t){
+ 161   1              unsigned int i,j;
+ 162   1              for(i=0;i<t;i++)
+ 163   1              for(j=0;j<125;j++);
+ 164   1      }
+ 165          
+ 166          void Bip(void){
+ 167   1              unsigned char i;
+ 168   1              for(i = 0; i < 100; i++){
+ 169   2                      Buzzer = 1;
+ 170   2                      delay_us(25);
+ 171   2                      Buzzer = 0;
+ 172   2                      delay_us(25);
+ 173   2                      }
+C51 COMPILER V9.60.0.0   MAIN                                                              09/16/2023 21:07:34 PAGE 4   
+
+ 174   1      }
+ 175          
+ 176          /**************Ctr giao tiep LCD 16x2 4bit**********************/
+ 177          void LCD_Enable(void){
+ 178   1              LCD_EN =1;
+ 179   1              delay_us(3);
+ 180   1              LCD_EN=0;
+ 181   1              delay_us(50);
+ 182   1      }
+ 183          //Ham Gui 4 Bit Du Lieu Ra LCD
+ 184          void LCD_Send4Bit(unsigned char Data){
+ 185   1              LCD_D4=Data & 0x01;
+ 186   1              LCD_D5=(Data>>1)&1;
+ 187   1              LCD_D6=(Data>>2)&1;
+ 188   1              LCD_D7=(Data>>3)&1;
+ 189   1      }
+ 190          // Ham Gui 1 Lenh Cho LCD
+ 191          void LCD_SendCommand(unsigned char command){
+ 192   1              LCD_Send4Bit(command >>4);/* Gui 4 bit cao */
+ 193   1              LCD_Enable();
+ 194   1              LCD_Send4Bit(command); /* Gui 4 bit thap*/
+ 195   1              LCD_Enable();
+ 196   1      }
+ 197          void LCD_Clear(){// Ham Xoa Man Hinh LCD
+ 198   1              LCD_SendCommand(0x01);
+ 199   1              delay_us(10);
+ 200   1      }
+ 201          // Ham Khoi Tao LCD
+ 202          void LCD_Init(){
+ 203   1              LCD_Send4Bit(0x00);
+ 204   1              delay_ms(20);
+ 205   1              LCD_RS=0;
+ 206   1              LCD_RW=0;
+ 207   1              LCD_Send4Bit(0x03);
+ 208   1              LCD_Enable();
+ 209   1              delay_ms(5);
+ 210   1              LCD_Enable();
+ 211   1              delay_us(100);
+ 212   1              LCD_Enable();
+ 213   1              LCD_Send4Bit(0x02);
+ 214   1              LCD_Enable();
+ 215   1              LCD_SendCommand( 0x28 ); // giao thuc 4 bit, hien thi 2 hang, ki tu 5x8
+ 216   1              LCD_SendCommand( 0x0c); // cho phep hien thi man hinh
+ 217   1              LCD_SendCommand( 0x06 ); // tang ID, khong dich khung hinh
+ 218   1              LCD_SendCommand(0x01); // xoa toan bo khung hinh
+ 219   1      }
+ 220          void LCD_Gotoxy(unsigned char x, unsigned char y){
+ 221   1              unsigned char address;
+ 222   1              if(!y)address=(0x80+x);
+ 223   1              else address=(0xc0+x);
+ 224   1              delay_us(1000);
+ 225   1              LCD_SendCommand(address);
+ 226   1              delay_us(50);
+ 227   1      }
+ 228          void LCD_PutChar(unsigned char Data){//Ham Gui 1 Ki Tu
+ 229   1              LCD_RS=1;
+ 230   1              LCD_SendCommand(Data);
+ 231   1              LCD_RS=0 ;
+ 232   1      }
+ 233          void LCD_Puts (char *s){//Ham gui 1 chuoi ky tu
+ 234   1              while (*s){
+ 235   2                      LCD_PutChar(*s);
+C51 COMPILER V9.60.0.0   MAIN                                                              09/16/2023 21:07:34 PAGE 5   
+
+ 236   2                      s++;
+ 237   2              }
+ 238   1      }
+ 239          void LCD_SendInteger(int iNumber){
+ 240   1              char i, CacKyTu[10];
+ 241   1              if(iNumber != 0){
+ 242   2                      if(iNumber < 0) LCD_PutChar(0x2D);  // dau tru
+ 243   2                      for(i = 0; iNumber != 0; i++){
+ 244   3                              if(iNumber > 0)
+ 245   3                                      CacKyTu[i] = iNumber  % 10;
+ 246   3                              else
+ 247   3                                      CacKyTu[i] = (iNumber * -1) % 10;
+ 248   3                              iNumber = iNumber / 10;
+ 249   3                      }
+ 250   2                      while(i > 0){
+ 251   3                              LCD_PutChar(CacKyTu[i - 1] | 0x30);
+ 252   3                              i--;
+ 253   3                      }
+ 254   2              }
+ 255   1              else{
+ 256   2                      LCD_PutChar(0 + 0x30);
+ 257   2              }
+ 258   1      }
+ 259          
+ 260          void LCD_SendFloat(float fNumber){
+ 261   1              int a, b;
+ 262   1              a = (int)fNumber;
+ 263   1              if (fNumber >= 0.0) b = (fNumber - a) * 10;
+ 264   1              else{
+ 265   2                      b = (fNumber - a) * (-10);
+ 266   2                      if(fNumber <= -0.1 && fNumber > -1.0)
+ 267   2                              LCD_PutChar(0x2D);
+ 268   2              }
+ 269   1              LCD_SendInteger(a);
+ 270   1              if(b >= 0){
+ 271   2                      LCD_PutChar('.');
+ 272   2                      LCD_SendInteger(b);
+ 273   2              }
+ 274   1      }
+ 275          
+ 276          void DS18B20_Reset(void) reentrant{
+ 277   1              char Result = 1;
+ 278   1              while(Result){
+ 279   2                      DQ = 0;
+ 280   2                      delay_us(60);
+ 281   2                      DQ = 1;
+ 282   2                      delay_us(5);
+ 283   2                      Result = DQ;
+ 284   2                      delay_us(10);
+ 285   2              }
+ 286   1      }
+ 287          
+ 288          char DS18B20_Read(void){
+ 289   1              char i, Result = 0;
+ 290   1              for(i = 0; i < 8; i++){
+ 291   2                      DQ = 0;
+ 292   2                      DQ = 1;
+ 293   2                      delay_us(3);
+ 294   2                      if(DQ){
+ 295   3                              Result = Result | (0x01 << i);
+ 296   3                              delay_us(6);
+ 297   3                      }
+C51 COMPILER V9.60.0.0   MAIN                                                              09/16/2023 21:07:34 PAGE 6   
+
+ 298   2              }
+ 299   1              return Result;
+ 300   1      }
+ 301          
+ 302          void DS18B20_Write(char Data) reentrant{
+ 303   1              char i;
+ 304   1              for(i = 0; i < 8; i++){
+ 305   2                      DQ = 0;
+ 306   2                      Data = Data >> 1;
+ 307   2                      DQ = CY;
+ 308   2                      delay_us(3);
+ 309   2                      DQ = 1;
+ 310   2                      delay_us(6);
+ 311   2              }
+ 312   1      }
+ 313          
+ 314          void DS18B20_Init(char aHigh, char aLow, char Mode){
+ 315   1              DS18B20_Reset();
+ 316   1              DS18B20_Write(SKIP_ROM);
+ 317   1              DS18B20_Write(WRITE_SCRATCHPAD);
+ 318   1              DS18B20_Write(aHigh);
+ 319   1              DS18B20_Write(aLow);
+ 320   1              DS18B20_Write(Mode);
+ 321   1      }
+ 322          
+ 323          
+ 324          
+ 325          
+ 326          /*****************Ham doc gia tri cho IC DS1307*******************************/
+ 327          unsigned char DS1307_Read(unsigned char address){
+ 328   1              unsigned char  Temp, Result;
+ 329   1              I2C_Start();
+ 330   1              I2C_Write(0xD0);          // ghi dia chi cua chip DS1307
+ 331   1              I2C_Write(address);      //  dia chi bat dau cua thanh ghi trong DS1307
+ 332   1              I2C_Start();
+ 333   1              I2C_Write(0xD1);
+ 334   1              Result = I2C_Read(0);
+ 335   1              I2C_Stop();
+ 336   1                                                              /* BCD to Hex */
+ 337   1              Temp = Result;
+ 338   1              Result = (((Result / 16)*10) + (Temp & 0x0F)); 
+ 339   1              
+ 340   1              return Result;
+ 341   1      }
+ 342          
+ 343          void DS1307_Read_Time(){     
+ 344   1              Second = DS1307_Read(0x00);    
+ 345   1              Minute = DS1307_Read(0x01);
+ 346   1              Hour   =  DS1307_Read(0x02);     
+ 347   1              Day    =   DS1307_Read(0x03);
+ 348   1              Date   =   DS1307_Read(0x04);
+ 349   1              Month  = DS1307_Read(0x05);
+ 350   1              Year   =   DS1307_Read(0x06);
+ 351   1              Mode12_24 = Hour & 0x40;
+ 352   1      
+ 353   1      }
+ 354          
+ 355          /*****************Ham ghi gia tri cho IC DS1307*******************************/
+ 356          void DS1307_Write(unsigned char address, unsigned char Data){
+ 357   1              unsigned char temp;
+ 358   1              // HEX to BCD //
+ 359   1              temp = Data;
+C51 COMPILER V9.60.0.0   MAIN                                                              09/16/2023 21:07:34 PAGE 7   
+
+ 360   1              Data = (((Data/10)*16)| (temp % 10));
+ 361   1              I2C_Start();
+ 362   1              I2C_Write(0xD0);          // ghi dia chi cua chip DS1307
+ 363   1              I2C_Write(address);      //  dia chi bat dau cua thanh ghi trong DS1307
+ 364   1              I2C_Write(Data);         //  ghi gia tri vao dia chi cua thanh ghi trong DS1307
+ 365   1              I2C_Stop();
+ 366   1      }
+ 367          
+ 368          void DS1307_Write_Time(){
+ 369   1      
+ 370   1              DS1307_Write(0x00,Second);
+ 371   1              DS1307_Write(0x01,Minute);
+ 372   1              DS1307_Write(0x02,Hour);
+ 373   1              DS1307_Write(0x03,Day);
+ 374   1              DS1307_Write(0x04,Date);
+ 375   1              DS1307_Write(0x05,Month);
+ 376   1              DS1307_Write(0x06,Year);
+ 377   1      }
+ 378          
+ 379          void DS1307_Write_Alarm1(void){
+ 380   1              // Khi cai dat xong gia tri thoi gian thi ghi xuong ds1307 de phong luc mat dien
+ 381   1              DS1307_Write(0x08,Alarm1.Minute);
+ 382   1              DS1307_Write(0x09,Alarm1.Hour);
+ 383   1              DS1307_Write(0x0A,Alarm1.On_Off);
+ 384   1              DS1307_Write(0x0B,Alarm1.Days.Day_2);
+ 385   1              DS1307_Write(0x0C,Alarm1.Days.Day_3);
+ 386   1              DS1307_Write(0x0D,Alarm1.Days.Day_4);
+ 387   1              DS1307_Write(0x0E,Alarm1.Days.Day_5);
+ 388   1              DS1307_Write(0x0F,Alarm1.Days.Day_6);
+ 389   1              DS1307_Write(0x10,Alarm1.Days.Day_7);
+ 390   1              DS1307_Write(0x11,Alarm1.Days.Day_8);
+ 391   1      }
+ 392          
+ 393          void DS1307_Write_Alarm2(void){
+ 394   1              // Khi cai dat xong gia tri thoi gian thi ghi xuong ds1307 de phong luc mat dien
+ 395   1              DS1307_Write(0x12,Alarm2.Minute);
+ 396   1              DS1307_Write(0x13,Alarm2.Hour);
+ 397   1              DS1307_Write(0x14,Alarm2.On_Off);
+ 398   1              DS1307_Write(0x15,Alarm2.Days.Day_2);
+ 399   1              DS1307_Write(0x16,Alarm2.Days.Day_3);
+ 400   1              DS1307_Write(0x17,Alarm2.Days.Day_4);
+ 401   1              DS1307_Write(0x18,Alarm2.Days.Day_5);
+ 402   1              DS1307_Write(0x19,Alarm2.Days.Day_6);
+ 403   1              DS1307_Write(0x1A,Alarm2.Days.Day_7);
+ 404   1              DS1307_Write(0x1B,Alarm2.Days.Day_8);
+ 405   1      }
+ 406          
+ 407          void DS1307_Read_Alarm(){     
+ 408   1              Alarm1.Minute            = DS1307_Read(0x08);    
+ 409   1              Alarm1.Hour              = DS1307_Read(0x09);
+ 410   1              Alarm1.On_Off            = DS1307_Read(0x0A);     
+ 411   1              Alarm1.Days.Day_2    = DS1307_Read(0x0B);
+ 412   1              Alarm1.Days.Day_3    = DS1307_Read(0x0C);
+ 413   1              Alarm1.Days.Day_4        = DS1307_Read(0x0D);
+ 414   1              Alarm1.Days.Day_5    = DS1307_Read(0x0E);
+ 415   1              Alarm1.Days.Day_6        = DS1307_Read(0x0F);
+ 416   1              Alarm1.Days.Day_7        = DS1307_Read(0x10);
+ 417   1              Alarm1.Days.Day_8        =      DS1307_Read(0x11);
+ 418   1              
+ 419   1              Alarm2.Minute            = DS1307_Read(0x12);    
+ 420   1              Alarm2.Hour              = DS1307_Read(0x13);
+ 421   1              Alarm2.On_Off            = DS1307_Read(0x14);     
+C51 COMPILER V9.60.0.0   MAIN                                                              09/16/2023 21:07:34 PAGE 8   
+
+ 422   1              Alarm2.Days.Day_2    = DS1307_Read(0x15);
+ 423   1              Alarm2.Days.Day_3    = DS1307_Read(0x16);
+ 424   1              Alarm2.Days.Day_4        = DS1307_Read(0x17);
+ 425   1              Alarm2.Days.Day_5    = DS1307_Read(0x18);
+ 426   1              Alarm2.Days.Day_6        = DS1307_Read(0x19);
+ 427   1              Alarm2.Days.Day_7        = DS1307_Read(0x1A);
+ 428   1              Alarm2.Days.Day_8        =      DS1307_Read(0x1B);
+ 429   1      }
+ 430          
+ 431          
+ 432          
+ 433          void Set_Clock(void){
+ 434   1              unsigned char y;
+ 435   1              y = (Year%4)*100;
+ 436   1              // Tang
+ 437   1              if(Minute > 0x3B) Minute = 0;
+ 438   1              if(Hour > 0x17) Hour = 0;
+ 439   1              if(Day > 0x07)  Day = 1;
+ 440   1              if((Month == 0x02) && (Date > 0x1D) && (y == 0)){       Date = 1;}
+ 441   1              else if((Month == 0x02) && (Date > 0x1C) && (y != 0)){  Date = 1;}
+ 442   1              else if(((Month == 0x04) || (Month == 0x06) || (Month == 0x09) || (Month == 0x0B)) && (Date > 0x1E) && (y
+             - != 0)){        Date = 1;       }
+ 443   1              else if((Date > 0x1F)){ Date = 1;}
+ 444   1              if(Month > 0x0C)        Month = 1;
+ 445   1              
+ 446   1      //      //Giam
+ 447   1              if(Minute < 0) Minute = 0x3B;
+ 448   1              if(Hour < 0) Hour = 0x17;
+ 449   1              if(Day < 1) Day = 0x07;
+ 450   1              if((Month == 0x02) && (Date < 0x01) && (y == 0)){       Date = 0x1D;}
+ 451   1              else if((Month == 0x02) && (Date < 0x01) && (y != 0)){  Date = 0x1C;}
+ 452   1              else if(((Month == 0x04) || (Month == 0x06) || (Month == 0x09) || (Month == 0x0B)) && (Date < 0x01) && (y
+             - != 0)){        Date = 0x1E;    }
+ 453   1              else if((Date < 1))     Date = 0x1F;
+ 454   1              if(Month < 1) Month = 0x0C;
+ 455   1      }
+ 456          
+ 457          
+ 458          void Set_Time_Alarm(void){
+ 459   1              // Neu bat bao thuc 1 thi cai dat bao thuc 1
+ 460   1              switch(Alarm_Pointer->Status_Mode){
+ 461   2                      case 1: case 2: { Alarm_Pointer->Display = 0; break; }
+ 462   2                      case 3: case 4: { Alarm_Pointer->Display = 1; break; }
+ 463   2                      case 5: case 6: { Alarm_Pointer->Display = 2; break; }
+ 464   2                      case 7: case 8: { Alarm_Pointer->Display = 3; break; }
+ 465   2                      case 9: case 10:{ Alarm_Pointer->Display = 4; break; }
+ 466   2                      case 11: { Alarm_Pointer->Status_Mode = 1; break;}
+ 467   2                      default: { break; }
+ 468   2              }
+ 469   1      
+ 470   1              // Tang
+ 471   1              if(Alarm_Pointer->Minute > 59) Alarm_Pointer->Minute = 0;
+ 472   1              if(Alarm_Pointer->Hour > 23) Alarm_Pointer->Hour  = 0;
+ 473   1              // Giam
+ 474   1              if(Alarm_Pointer->Minute < 0) Alarm_Pointer->Minute = 59;
+ 475   1              if(Alarm_Pointer->Hour < 0) Alarm_Pointer->Hour = 23;
+ 476   1              
+ 477   1              if(Alarm1.Hour == Hour && Alarm1.Minute == Minute){     
+ 478   2                      if(Alarm1.Days.Day_2 == (Day == 2)) Bip();
+ 479   2                      if(Alarm1.Days.Day_3 == (Day == 3)) Bip();
+ 480   2                      if(Alarm1.Days.Day_4 == (Day == 4)) Bip();
+ 481   2                      if(Alarm1.Days.Day_5 == (Day == 5)) Bip();
+C51 COMPILER V9.60.0.0   MAIN                                                              09/16/2023 21:07:34 PAGE 9   
+
+ 482   2                      if(Alarm1.Days.Day_6 == (Day == 6)) Bip();
+ 483   2                      if(Alarm1.Days.Day_7 == (Day == 7)) Bip();
+ 484   2                      if(Alarm1.Days.Day_8 == (Day == 1)) Bip();
+ 485   2              }
+ 486   1              
+ 487   1              if(Alarm2.Hour == Hour && Alarm2.Minute == Minute){     
+ 488   2                      if(Alarm2.Days.Day_2 == (Day == 2)) Bip();
+ 489   2                      if(Alarm2.Days.Day_3 == (Day == 3)) Bip();
+ 490   2                      if(Alarm2.Days.Day_4 == (Day == 4)) Bip();
+ 491   2                      if(Alarm2.Days.Day_5 == (Day == 5)) Bip();
+ 492   2                      if(Alarm2.Days.Day_6 == (Day == 6)) Bip();
+ 493   2                      if(Alarm2.Days.Day_7 == (Day == 7)) Bip();
+ 494   2                      if(Alarm2.Days.Day_8 == (Day == 1)) Bip();
+ 495   2              }
+ 496   1      }
+ 497                  
+ 498          
+ 499          void KeyBoard(void){
+ 500   1      
+ 501   1              /*******************************************Chon che do ************************************/
+ 502   1                      if(Button_Mode == 0){
+ 503   2                              delay_ms(10);
+ 504   2                              Time_Break_Mode++;
+ 505   2                              if(Time_Break_Mode > 30 && Time_Break_Mode < 32){
+ 506   3                                      Bip();
+ 507   3                                      LCD_Clear();
+ 508   3                                      Choose_Alarm_Active = 1;
+ 509   3                                      Set_Time =  Status_Mode_Time = 0;
+ 510   3                              }
+ 511   2                              if(Time_Break_Mode > 58 && Time_Break_Mode < 60){
+ 512   3                                      Bip();
+ 513   3                                      LCD_Clear();
+ 514   3                                      while(!Button_Mode){
+ 515   4                                              LCD_Gotoxy(0,0);
+ 516   4                                              LCD_Puts("Setting Clock");
+ 517   4                                              Second = DS1307_Read(0x00); // tranh truong hop bi mat thoi gian vi giu phim lau
+ 518   4                                      }
+ 519   3                                      LCD_Clear();
+ 520   3                                      Choose_Alarm_Active = Choose_Alarm = 0;
+ 521   3                                      Set_Time = Status_Mode_Time = 1;
+ 522   3                              }
+ 523   2                              if(!Button_Mode && Old_Mode ){
+ 524   3                                      Bip();
+ 525   3                                      if(Set_Time){
+ 526   4                                              Status_Mode_Time++;
+ 527   4                                              if(Status_Mode_Time > 6) Status_Mode_Time = 1;
+ 528   4                                      }
+ 529   3                                      // Chi chon bat hoac tat bao thuc 1, 2. Chon xong khi bam ok (Set_Alarm) se ve muc 0
+ 530   3                                      if( Choose_Alarm_Active )       Choose_Alarm = ~Choose_Alarm;
+ 531   3                                      
+ 532   3                                      // Chon che do cho bao thuc 1 ,2
+ 533   3                                      if(Set_ALM1 && !Prioritized)    Alarm1.Status_Mode++;
+ 534   3                                      if(Set_ALM2 && Prioritized)     Alarm2.Status_Mode++;
+ 535   3                              }
+ 536   2                      }else{
+ 537   2                              Time_Break_Mode = 0;
+ 538   2                      }
+ 539   1              Old_Mode = Button_Mode;
+ 540   1      
+ 541   1                      
+ 542   1              /*******************************************Nut bam tang gia tri ************************************/
+ 543   1              if(Button_Up == 0){
+C51 COMPILER V9.60.0.0   MAIN                                                              09/16/2023 21:07:34 PAGE 10  
+
+ 544   2                      delay_ms(10);
+ 545   2                      // Nhan giu 1 khoang thoi gian thi gia tri lien tuc thi tang lien tuc
+ 546   2                      Time_Break_Up++;
+ 547   2                      if(Time_Break_Up >12){
+ 548   3                              Time_Break_Up = 13;                     // Tranh tran gia tri 
+ 549   3                              Old_Up = 1;
+ 550   3                      }
+ 551   2                      // Nhan nha luon thi cong 1 gia tri
+ 552   2                      if(!Button_Up && Old_Up){
+ 553   3                              if(Time_Break_Up < 13) Bip();
+ 554   3                              if(Set_Time){                                                           // Cai dat thoi gian
+ 555   4                                      switch(Status_Mode_Time){
+ 556   5                                              case 1: { Minute++; break;}
+ 557   5                                              case 2: { Hour++;    break;}
+ 558   5                                              case 3: { Day++;     break;}
+ 559   5                                              case 4: { Date++;    break;}
+ 560   5                                              case 5: { Month++; break;}
+ 561   5                                              case 6: { Year++;    break;}
+ 562   5                                              default:{               break;}
+ 563   5                                      }
+ 564   4                              }
+ 565   3                              
+ 566   3                              // Chi chon bat hoac tat bao thuc 1, 2. Chon xong khi bam ok (Set_Alarm) se ve muc 0
+ 567   3                              if(Choose_Alarm_Active){
+ 568   4                                      if(Choose_Alarm == 0) Alarm1.On_Off = 1;
+ 569   4                                      if(Choose_Alarm == 1) Alarm2.On_Off = 1;
+ 570   4                              }
+ 571   3                              
+ 572   3                              // Cai dat thoi gian bao thuc ngay bao thuc
+ 573   3                              switch(Alarm_Pointer->Status_Mode){
+ 574   4                                      case 1: { Alarm_Pointer->Minute++;                 break;}
+ 575   4                                      case 2: { Alarm_Pointer->Hour++;                   break;}
+ 576   4                                      case 3: { Alarm_Pointer->Days.Day_2 = 1;   break;}
+ 577   4                                      case 4: { Alarm_Pointer->Days.Day_3 = 1;   break;}
+ 578   4                                      case 5: { Alarm_Pointer->Days.Day_4 = 1;   break;}
+ 579   4                                      case 6: { Alarm_Pointer->Days.Day_5 = 1;   break;}
+ 580   4                                      case 7: { Alarm_Pointer->Days.Day_6 = 1;   break;}
+ 581   4                                      case 8: { Alarm_Pointer->Days.Day_7 = 1;   break;}
+ 582   4                                      case 9: { Alarm_Pointer->Days.Day_8 = 1;   break;}
+ 583   4                                      default: {                                                break;}
+ 584   4                              }
+ 585   3                              
+ 586   3      
+ 587   3                      }
+ 588   2              }
+ 589   1              else{
+ 590   2                      Time_Break_Up = 0;
+ 591   2              }
+ 592   1              Old_Up = Button_Up;
+ 593   1              
+ 594   1              
+ 595   1              /*******************************************Nut bam giam gia tri ************************************/
+ 596   1              if(Button_Down == 0){
+ 597   2                      delay_ms(10);
+ 598   2                      // Nhan giu 1 khoang thoi gian thi gia tri giam lien tuc 
+ 599   2                      Time_Break_Down++;
+ 600   2                      if(Time_Break_Down > 12){
+ 601   3                              Time_Break_Down = 13;
+ 602   3                              Old_Down = 1;
+ 603   3                      }
+ 604   2                      // Nhan nha luon thi gia tri giam 1 don vi
+ 605   2                      if(!Button_Down && Old_Down){
+C51 COMPILER V9.60.0.0   MAIN                                                              09/16/2023 21:07:34 PAGE 11  
+
+ 606   3                              if(Time_Break_Down < 13) Bip();
+ 607   3                              if(Set_Time){
+ 608   4                                      switch(Status_Mode_Time){
+ 609   5                                              case 1: { Minute--; break;}
+ 610   5                                              case 2: { Hour--;    break;}
+ 611   5                                              case 3: { Day--;      break;}
+ 612   5                                              case 4: { Date--;     break;}
+ 613   5                                              case 5: { Month--;  break;}
+ 614   5                                              case 6: { Year--;     break;}
+ 615   5                                              default:{               break;}
+ 616   5                                      }
+ 617   4                              }
+ 618   3                              // Chi chon bat hoac tat bao thuc 1, 2. Chon xong khi bam ok (Set_Alarm) se ve muc 0
+ 619   3                              if(Choose_Alarm_Active){
+ 620   4                                      if(Choose_Alarm == 0) Alarm1.On_Off = 0;
+ 621   4                                      if(Choose_Alarm == 1) Alarm2.On_Off = 0;
+ 622   4                              }
+ 623   3                              switch(Alarm_Pointer->Status_Mode){
+ 624   4                                      case 1: { Alarm_Pointer->Minute--;                 break;}
+ 625   4                                      case 2: { Alarm_Pointer->Hour--;                   break;}
+ 626   4                                      case 3: { Alarm_Pointer->Days.Day_2 = 0;   break;}
+ 627   4                                      case 4: { Alarm_Pointer->Days.Day_3 = 0;   break;}
+ 628   4                                      case 5: { Alarm_Pointer->Days.Day_4 = 0;   break;}
+ 629   4                                      case 6: { Alarm_Pointer->Days.Day_5 = 0;   break;}
+ 630   4                                      case 7: { Alarm_Pointer->Days.Day_6 = 0;   break;}
+ 631   4                                      case 8: { Alarm_Pointer->Days.Day_7 = 0;   break;}
+ 632   4                                      case 9: { Alarm_Pointer->Days.Day_8 = 0;   break;}
+ 633   4                                      default: {                                                break;}
+ 634   4                              }
+ 635   3                      }
+ 636   2              }
+ 637   1              else{
+ 638   2                      Time_Break_Down = 0;
+ 639   2              }
+ 640   1              Old_Down = Button_Down;
+ 641   1                              
+ 642   1              
+ 643   1              /*******************************************Nut bam hoan thanh ************************************/
+ 644   1              if(Button_Ok == 0){
+ 645   2                      delay_ms(10);
+ 646   2                      if((!Button_Ok) &&  Old_Ok){
+ 647   3                              Bip();
+ 648   3                              if(Set_Time){
+ 649   4                                      LCD_Clear();
+ 650   4                                      Status_Mode_Time  = Set_Time = 0;
+ 651   4                                      DS1307_Write_Time();
+ 652   4                              }
+ 653   3                              if(Choose_Alarm_Active){
+ 654   4                                      if(Alarm1.On_Off){ 
+ 655   5                                              Set_ALM1 = Alarm1.Status_Mode = 1;
+ 656   5                                              Choose_Alarm_Active = 0;
+ 657   5                                      }
+ 658   4                                      if(Alarm2.On_Off){
+ 659   5                                              Set_ALM2 = Alarm2.Status_Mode = 1;
+ 660   5                                              Choose_Alarm_Active = 0;
+ 661   5                                      }
+ 662   4                                      if( !Alarm1.On_Off && Alarm2.On_Off) Prioritized = 1; // trg hop chi bat bao thuc 2 thi Prioritized = 
+             -1 luon
+ 663   4                                      
+ 664   4                                      if(Alarm1.On_Off && Alarm2.On_Off) Prioritized = 0; // show_in_turn = 0 hien thi bao thuc 1 sau khi ca
+             -i dat xong bao thuc 1 thi Prioritized = 1;
+ 665   4                                      
+C51 COMPILER V9.60.0.0   MAIN                                                              09/16/2023 21:07:34 PAGE 12  
+
+ 666   4                                      // Neu khong muon cai dat bao thuc thi de ca 2 bao thuc o muc 0 khi bam ok se thoat ra man hinh chinh
+ 667   4                                      if( !Alarm1.On_Off && !Alarm2.On_Off ){
+ 668   5                                              DS1307_Write(0x0A,0x00);           // neu tat ca 2 bao thuc thi se ghi xuong ds1307 la trang thai off
+ 669   5                                              DS1307_Write(0x14, 0x00);
+ 670   5                                              Choose_Alarm_Active = 0;
+ 671   5                                      }
+ 672   4                                      // Neu bat ca 2 bao thuc thi se hien thi cai dat bao thuc 1 trc xong den bao thuc 2
+ 673   4                              }
+ 674   3                              // Khi cai dat xong thoi gian bao thuc se bam thoat ra man hinh chinh
+ 675   3                              if(Alarm1.Status_Mode == 10){
+ 676   4                                      if(Set_ALM2) Prioritized = 1;
+ 677   4                                      DS1307_Write_Alarm1();
+ 678   4                                      Set_ALM1 = Alarm1.Status_Mode = 0;
+ 679   4                              }
+ 680   3                              
+ 681   3                              if(Alarm2.Status_Mode == 10){
+ 682   4                                      DS1307_Write_Alarm2();
+ 683   4                                      Set_ALM2 = Alarm2.Status_Mode = 0;
+ 684   4                              }
+ 685   3                      }
+ 686   2              }
+ 687   1              Old_Ok = Button_Ok;
+ 688   1              
+ 689   1                      if(Set_ALM1 && !Prioritized) Alarm_Pointer = &Alarm1;
+ 690   1                      if(Set_ALM2 && Prioritized) Alarm_Pointer = &Alarm2;
+ 691   1              
+ 692   1                      Set_Clock();
+ 693   1                      Set_Time_Alarm();
+ 694   1      }
+ 695                                  
+ 696                          
+ 697          void HienThiLCD(void){
+ 698   1              if(Set_Time && Clock_1Hz) goto nhapNhay;
+ 699   1              if( !Choose_Alarm_Active  && !Set_ALM1 && !Set_ALM2 && !Set_Time){
+ 700   2                      nhapNhay:
+ 701   2                      LCD_Gotoxy(0,0);
+ 702   2                      LCD_PutChar(Hour / 10 | 0x30);
+ 703   2                      LCD_PutChar(Hour % 10 | 0x30);
+ 704   2                      LCD_PutChar(':');
+ 705   2                      LCD_PutChar(Minute / 10 | 0x30);
+ 706   2                      LCD_PutChar(Minute % 10 | 0x30);
+ 707   2                      LCD_PutChar(':');
+ 708   2                      LCD_PutChar(Second / 10 | 0x30);
+ 709   2                      LCD_PutChar(Second % 10 | 0x30);
+ 710   2                      
+ 711   2      //              if(!Set_Time){
+ 712   2      //                      LCD_PutChar(' ');
+ 713   2      //                      LCD_SendFloat(fTemp);
+ 714   2      //                      if(fTemp > 0.0 && fTemp < 10.0) LCD_Gotoxy(12,0);
+ 715   2      //                      LCD_PutChar(0xDF);
+ 716   2      //                      LCD_Puts("C   ");
+ 717   2      //              }
+ 718   2                      
+ 719   2              
+ 720   2                      LCD_Gotoxy(2,1);
+ 721   2                      LCD_Puts(Days[Day-1]);
+ 722   2                      LCD_PutChar(' ');
+ 723   2                      LCD_PutChar(Date / 10 | 0x30);
+ 724   2                      LCD_PutChar(Date % 10 | 0x30);
+ 725   2                      LCD_PutChar('/');
+ 726   2                      LCD_PutChar(Month / 10 | 0x30);
+ 727   2                      LCD_PutChar(Month % 10 | 0x30);
+C51 COMPILER V9.60.0.0   MAIN                                                              09/16/2023 21:07:34 PAGE 13  
+
+ 728   2                      LCD_Puts("/20");
+ 729   2                      LCD_PutChar(Year / 10 | 0x30);
+ 730   2                      LCD_PutChar(Year % 10 | 0x30);
+ 731   2              }
+ 732   1              if(!Clock_1Hz){
+ 733   2                      switch(Status_Mode_Time){
+ 734   3                      case 1: {LCD_Gotoxy(3,0);  LCD_Puts("  ") ; break;}
+ 735   3                      case 2: {LCD_Gotoxy(0,0);  LCD_Puts("  ");  break;}
+ 736   3                      case 3: {LCD_Gotoxy(2,1);  LCD_Puts("   "); break;}
+ 737   3                      case 4: {LCD_Gotoxy(6,1);  LCD_Puts("  ");  break;}
+ 738   3                      case 5: {LCD_Gotoxy(9,1);  LCD_Puts("  ");  break;}
+ 739   3                      case 6: {LCD_Gotoxy(14,1); LCD_Puts("  "); break;}
+ 740   3                      default:{break;}
+ 741   3                      }
+ 742   2              }
+ 743   1      
+ 744   1              /******************************************************* Hien thi bat tat bao thuc **********************
+             -************************************/
+ 745   1              if(Choose_Alarm_Active){
+ 746   2                      LCD_Gotoxy(0,0);
+ 747   2                      LCD_Puts(" Setting  Alarm ");
+ 748   2                      // Hien thi bao thuc 1 che do on off va nhay nhay "on/off"
+ 749   2                      LCD_Gotoxy(0,1);
+ 750   2                      LCD_Puts("ALM1:");
+ 751   2                      LCD_Gotoxy(5,1);
+ 752   2                      if(Clock_1Hz){
+ 753   3                              // Hien thi bao thuc 1 che do on/off
+ 754   3                              if(Alarm1.On_Off == 1){
+ 755   4                                      LCD_Puts("ON ");
+ 756   4                              }else{
+ 757   4                                      LCD_Puts("OF ");
+ 758   4                              }
+ 759   3                              // Hien thi bao thuc 2 che do on/off
+ 760   3                              LCD_Gotoxy(9,1);
+ 761   3                              LCD_Puts("ALM2:");
+ 762   3                              LCD_Gotoxy(14,1);
+ 763   3                              if(Alarm2.On_Off == 1){
+ 764   4                                      LCD_Puts("ON");
+ 765   4                              }else{
+ 766   4                                      LCD_Puts("OF");
+ 767   4                              }
+ 768   3                      }
+ 769   2                      else{
+ 770   3                              // Hien thi nhap nhay the hien dang chon bao thuc 1 hoac 2
+ 771   3                              if(Choose_Alarm == 0){
+ 772   4                                      LCD_Gotoxy(5,1);
+ 773   4                                      LCD_Puts("  ");
+ 774   4                              }
+ 775   3                              if(Choose_Alarm == 1){
+ 776   4                              LCD_Gotoxy(14,1);
+ 777   4                              LCD_Puts("  ");
+ 778   4                              }
+ 779   3                      }
+ 780   2                      
+ 781   2                      // Hien thi bao thuc 2 che do on off va nhay nhay "on/off"
+ 782   2      
+ 783   2              }
+ 784   1              /******************************************************* Het hien thi chon bat/tat bao thuc  ************
+             -**********************************************/
+ 785   1      
+ 786   1                      
+ 787   1              /********************************************************Hien thi cai dat bao thuc 1 ********************
+C51 COMPILER V9.60.0.0   MAIN                                                              09/16/2023 21:07:34 PAGE 14  
+
+             -**********************************************/
+ 788   1              if( Set_ALM1  || Set_ALM2){
+ 789   2                      
+ 790   2                      LCD_Gotoxy(0,0);
+ 791   2                      if(Alarm_Pointer->Display != 0) LCD_PutChar(0x7F);    // <-
+ 792   2                      else{ LCD_PutChar(' ');}
+ 793   2                      
+ 794   2                      if(Alarm1.On_Off && !Prioritized)LCD_Puts(" Setting ALM1 ");
+ 795   2                      if(Alarm2.On_Off && Prioritized) LCD_Puts(" Setting ALM2 ");
+ 796   2                      
+ 797   2                      if(Alarm_Pointer->Display != 4) LCD_PutChar(0x7E);        // ->
+ 798   2                      else { LCD_PutChar(' ');}
+ 799   2                      LCD_Gotoxy(0,1);
+ 800   2                      
+ 801   2                      if(Clock_1Hz){
+ 802   3                              if(Alarm_Pointer->Display == 0){
+ 803   4                                      LCD_Puts("   ");
+ 804   4                                      LCD_PutChar(Alarm_Pointer->Hour / 10 | 0x30);
+ 805   4                                      LCD_PutChar(Alarm_Pointer->Hour % 10 | 0x30);
+ 806   4                                      LCD_PutChar(':');
+ 807   4                                      LCD_PutChar(Alarm_Pointer->Minute / 10 | 0x30);
+ 808   4                                      LCD_PutChar(Alarm_Pointer->Minute % 10 | 0x30);
+ 809   4                                      LCD_Puts("         ");
+ 810   4                              }
+ 811   3                              if(Alarm_Pointer->Display == 1){
+ 812   4                                      LCD_Puts("MON: ");
+ 813   4                                      if(Alarm_Pointer->Days.Day_2) LCD_Puts("v   ");
+ 814   4                                      else{ LCD_Puts("x   ");}
+ 815   4                                      
+ 816   4                                      LCD_Puts("TUE: ");
+ 817   4                                      if(Alarm_Pointer->Days.Day_3)  LCD_Puts("v   ");
+ 818   4                                      else{ LCD_Puts("x   ");}
+ 819   4                              }
+ 820   3                              if(Alarm_Pointer->Display == 2){
+ 821   4                                      LCD_Puts("WED: ");
+ 822   4                                      if(Alarm_Pointer->Days.Day_4)  LCD_Puts("v   ");
+ 823   4                                      else{ LCD_Puts("x   ");}
+ 824   4                                      
+ 825   4                                      LCD_Puts("THU: ");
+ 826   4                                      if(Alarm_Pointer->Days.Day_5)  LCD_Puts("v   ");
+ 827   4                                      else{ LCD_Puts("x   ");}
+ 828   4                              }
+ 829   3                              if(Alarm_Pointer->Display == 3){
+ 830   4                                      LCD_Puts("FRI: ");
+ 831   4                                      if(Alarm_Pointer->Days.Day_6)  LCD_Puts("v   ");
+ 832   4                                      else{ LCD_Puts("x   ");}
+ 833   4                                      
+ 834   4                                      LCD_Puts("SAT: ");
+ 835   4                                      if(Alarm_Pointer->Days.Day_7)  LCD_Puts("v   ");
+ 836   4                                      else{ LCD_Puts("x   ");}
+ 837   4                              }
+ 838   3                              if(Alarm_Pointer->Display == 4){
+ 839   4                                      LCD_Puts("SUN: ");
+ 840   4                                      if(Alarm_Pointer->Days.Day_8)  LCD_Puts("v   ");
+ 841   4                                      else{ LCD_Puts("x   ");}
+ 842   4                                      LCD_Puts("EXIT     ");
+ 843   4                              }
+ 844   3                      }
+ 845   2              
+ 846   2                      else{
+ 847   3                              switch(Alarm_Pointer->Status_Mode){
+ 848   4                                      case 1: { LCD_Gotoxy(6,1);   LCD_Puts("  ");            break;}
+C51 COMPILER V9.60.0.0   MAIN                                                              09/16/2023 21:07:34 PAGE 15  
+
+ 849   4                                      case 2: { LCD_Gotoxy(3,1);   LCD_Puts("  ");            break;}
+ 850   4                                      case 3: { LCD_Gotoxy(5,1);   LCD_PutChar(' ');          break;}
+ 851   4                                      case 4: { LCD_Gotoxy(14,1); LCD_PutChar(' ');           break;}
+ 852   4                                      case 5: { LCD_Gotoxy(5,1);   LCD_PutChar(' ');          break;}
+ 853   4                                      case 6: { LCD_Gotoxy(14,1); LCD_PutChar(' ');           break;}
+ 854   4                                      case 7: { LCD_Gotoxy(5,1);   LCD_PutChar(' ');          break;}
+ 855   4                                      case 8: { LCD_Gotoxy(14,1); LCD_PutChar(' ');           break;}
+ 856   4                                      case 9: { LCD_Gotoxy(5,1);   LCD_PutChar(' ');          break;}
+ 857   4                                      case 10: { LCD_Gotoxy(9,1);   LCD_Puts("         ");  break;}
+ 858   4                                      default: {                                                                                                              break;}
+ 859   4                              }
+ 860   3                      }
+ 861   2              }       
+ 862   1      }
+ 863          
+ 864          void DS1307_Init(){
+ 865   1              // ham nay co chuc nang reset bit ch = 0 o dia chi 0x7F de bat bo giao dong tinh the thach anh
+ 866   1              unsigned char temp;
+ 867   1              temp = DS1307_Read(0x00);
+ 868   1              temp &= 0x7F;
+ 869   1              DS1307_Write(0x00,temp);
+ 870   1      }
+ 871          
+ 872          void Set_Timer(void){
+ 873   1              TMOD &= 0xF0;
+ 874   1              TMOD |= 0x01;
+ 875   1              EA = 1;
+ 876   1              ET0 = 1;
+ 877   1              TF0 = 1;
+ 878   1              IT1 = 1;
+ 879   1      }
+ 880          
+ 881          void main(){
+ 882   1              Set_Timer();
+ 883   1              DS1307_Init();
+ 884   1              //DS18B20_Init(0,0,MODE_12BIT);
+ 885   1              LCD_Init();
+ 886   1              DS1307_Read_Alarm();
+ 887   1              while(1){
+ 888   2                      if(Status_Mode_Time == 0 && read_time == 1){
+ 889   3                              read_time = 0;
+ 890   3                                      DS1307_Read_Time();
+ 891   3                      }
+ 892   2                      /*if(read_temp){
+ 893   2                              read_temp = 0;
+ 894   2                              DS18B20_Reset();
+ 895   2                              DS18B20_Write(SKIP_ROM);
+ 896   2                              DS18B20_Write(READ_SCRATCHPAD);
+ 897   2                              a = DS18B20_Read();
+ 898   2                              b = DS18B20_Read();
+ 899   2                              iTemp = (b << 8) | a;
+ 900   2                              fTemp = (float)(iTemp)/16.0;
+ 901   2                      }
+ 902   2                              */
+ 903   2                      //KeyBoard();
+ 904   2                      HienThiLCD();
+ 905   2              }
+ 906   1      }
+ 907          
+ 908          unsigned char CountTimer = 0, Count2 = 0;
+ 909          void T0_ISR(void) interrupt 1{
+ 910   1              TR0 = 0;
+C51 COMPILER V9.60.0.0   MAIN                                                              09/16/2023 21:07:34 PAGE 16  
+
+ 911   1              TH0 = 0x3C;
+ 912   1              TL0 = 0xB0;
+ 913   1              TR0 = 1;
+ 914   1              CountTimer++;
+ 915   1              if(CountTimer == 5) read_time = 1;
+ 916   1              if(CountTimer == 10){
+ 917   2                      read_time = 1;
+ 918   2                      Clock_1Hz = ~Clock_1Hz;
+ 919   2                      Count2++;
+ 920   2                      CountTimer = 0;
+ 921   2              }
+ 922   1              if(Count2 == 3){ 
+ 923   2                      Count2 = 0;
+ 924   2                      DS18B20_Reset();
+ 925   2                      DS18B20_Write(SKIP_ROM);
+ 926   2                      DS18B20_Write(CONVERT);
+ 927   2                      read_temp = 1;
+ 928   2              }
+ 929   1      }
+ 930          
+ 931          
+ 932          
+ 933          
+ 934          
+ 935          
+ 936          
+ 937          
+ 938          
+ 939          
+ 940          
+ 941          
+ 942                          
+ 943                          
+ 944                          
+ 945                          
+ 946                  
+ 947          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   4718    ----
+   CONSTANT SIZE    =    198    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     71      20
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =     15       2
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
